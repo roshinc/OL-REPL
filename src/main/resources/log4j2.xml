@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Configuration status="warn">
     <Properties>
-        <Property name="basePath">C:/temp/logs</Property>
+        <Property name="basePath">logs</Property>
     </Properties>
     <Appenders>
         <RollingFile name="fileLogger"
@@ -25,7 +25,7 @@
         </RollingFile>
     </Appenders>
     <Loggers>
-        <Root level="info" additivity="false">
+        <Root level="debug" additivity="false">
             <appender-ref ref="fileLogger"/>
         </Root>
     </Loggers>

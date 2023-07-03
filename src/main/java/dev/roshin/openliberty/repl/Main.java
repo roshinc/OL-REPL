@@ -5,20 +5,22 @@ package dev.roshin.openliberty.repl;
 
 import dev.roshin.openliberty.repl.jmx.rest.JMXUtil;
 import dev.roshin.openliberty.repl.preparers.ServerXMLPreparer;
-import org.jline.reader.LineReader;
-import org.jline.reader.LineReaderBuilder;
+import dev.roshin.openliberty.repl.util.ServerSourceUtils;
 import org.jline.terminal.Terminal;
 import org.jline.terminal.TerminalBuilder;
 import org.jline.utils.AttributedStringBuilder;
 import org.jline.utils.AttributedStyle;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-import java.io.*;
+import java.io.File;
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.io.RandomAccessFile;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.List;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
 
 /**
  *
@@ -29,7 +31,11 @@ public class Main {
     private static Process mavenProcess = null;
     private static volatile boolean serverReady = false;
 
+    private static Logger logger = LoggerFactory.getLogger(Main.class);
+
     public static void main(String[] args) throws IOException {
+        logger.debug("Starting Main");
+        logger.error("Checking error log");
 
         // Create a terminal
         Terminal terminal = TerminalBuilder.builder().system(true).build();
@@ -37,12 +43,13 @@ public class Main {
         // Print the introduction
         printIntroduction(terminal);
 
+        logger.debug("Introduction printed");
+
         // Pick the server source
-        Path serverSource = pickServerSource(terminal);
+        Path serverSource = ServerSourceUtils.pickServerSource(terminal);
 
+        logger.debug("Server source picked: {}", serverSource);
 
-        // Validate the server source
-        validateServerSource(serverSource, terminal);
 
         // Prepare the server source
         prepareServerSource(serverSource, terminal);
@@ -103,10 +110,20 @@ public class Main {
             // Write the jmx url to the terminal
             terminal.writer().println("JMX URL: " + JMXUtil.findRestConnectorURL(serverSource, terminal));
 
+            Repl repl = new Repl(JMXUtil.findRestConnectorURL(serverSource, terminal), "todd", "toddpassword", terminal);
+            repl.start();
 
         } catch (Exception e) {
             e.printStackTrace();
+            logger.error("Error starting ol repl", e);
+            //Inform the user that an error occurred, with the word "error" in red
+            AttributedStringBuilder errorStringBuilder = new AttributedStringBuilder();
+            errorStringBuilder.append("Error: ", AttributedStyle.BOLD.foreground(AttributedStyle.RED));
+            errorStringBuilder.append(e.getMessage(), AttributedStyle.BOLD.foreground(AttributedStyle.RED));
+            terminal.writer().println(errorStringBuilder.toAnsi());
         } finally {
+            // Flush the terminal writer
+            terminal.writer().flush();
             // If the server was not stopped in a normal way, or if an error occurred,
             // the Maven process is killed here
             if (mavenProcess != null && mavenProcess.isAlive()) {
@@ -169,198 +186,6 @@ public class Main {
     }
 
 
-    private static void validateServerSource(Path serverSource, Terminal terminal) {
-        // Inform the user that the server source is being validated
-        terminal.writer().println("Validating the server source...");
-
-        // Check if this is a maven project
-        if (!Files.exists(serverSource.resolve("pom.xml"))) {
-            throw new IllegalStateException("The selected server source is not a maven project");
-        }
-        // Validate the pom.xml file
-        validateServerSourcePom(serverSource);
-
-        // Check if the server source contains the src/main/liberty/config/server.xml file
-        if (!Files.exists(serverSource.resolve("src/main/liberty/config/server.xml"))) {
-            throw new IllegalStateException("The selected server source does not contain the server.xml file");
-        }
-
-        // Check if the server contains the maven wrapper for the current OS
-        if (System.getProperty("os.name").toLowerCase().startsWith("windows")) {
-            if (!Files.exists(serverSource.resolve("mvnw.cmd"))) {
-                throw new IllegalStateException("The selected server source does not contain the maven wrapper for Windows");
-            }
-        } else { // Linux or Mac
-            if (!Files.exists(serverSource.resolve("mvnw"))) {
-                throw new IllegalStateException("The selected server source does not contain the maven wrapper for Linux or Mac");
-            }
-        }
-
-        // Check if the server source is a git repository
-        // Check if the selected directory is a Git repository and fetch the latest commit hash and message
-        ProcessBuilder processBuilder = new ProcessBuilder();
-        processBuilder.command("git", "rev-parse", "--is-inside-work-tree");
-        processBuilder.directory(serverSource.toFile());
-
-        try {
-            Process process = processBuilder.start();
-            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-            String line;
-            while ((line = reader.readLine()) != null) {
-                if ("true".equals(line)) {
-                    // It's a git repository, print the latest commit hash and message
-                    processBuilder.command("git", "log", "-1", "--pretty=format:%h - %s");
-                    process = processBuilder.start();
-                    reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-                    while ((line = reader.readLine()) != null) {
-                        terminal.writer().println(
-                                new AttributedStringBuilder()
-                                        .append("Latest commit: " + line + "\n", AttributedStyle.DEFAULT.foreground(AttributedStyle.GREEN))
-                                        .toAnsi()
-                        );
-                    }
-                } else {
-                    terminal.writer().println(
-                            new AttributedStringBuilder()
-                                    .append("Not a Git repository\n", AttributedStyle.DEFAULT.foreground(AttributedStyle.RED))
-                                    .toAnsi()
-                    );
-                }
-            }
-        } catch (IOException e) {
-            throw new RuntimeException("Error while checking Git repository", e);
-        }
-    }
-
-    private static void validateServerSourcePom(Path serverSource) {
-        // Check if the pom.xml file contains the liberty-maven-plugin
-        Path pomFile = serverSource.resolve("pom.xml");
-        try {
-            List<String> lines = Files.readAllLines(pomFile);
-            boolean found = false;
-            for (String line : lines) {
-                if (line.contains("liberty-maven-plugin")) {
-                    found = true;
-                    break;
-                }
-            }
-            if (!found) {
-                throw new IllegalStateException("The pom.xml file does not contain the liberty-maven-plugin");
-            }
-        } catch (IOException e) {
-            throw new IllegalStateException("Unable to read the pom.xml file", e);
-        }
-    }
-
-    private static Path pickServerSource(Terminal terminal) {
-        // Create a writer
-        PrintWriter writer = terminal.writer();
-
-
-        // Create a LineReader
-        LineReader lineReader = LineReaderBuilder.builder()
-                .terminal(terminal)
-                .build();
-
-        // Path of the directory
-        String currentWorkingDirectory = System.getProperty("user.dir");
-        Path directory = Paths.get(currentWorkingDirectory, "server-sources");
-
-        // Create a string builder
-        AttributedStringBuilder asb = new AttributedStringBuilder();
-        // Append the location of the server sources
-        asb.append("Looking for server sources in: ");
-        asb.append(directory.toString(), AttributedStyle.DEFAULT.foreground(AttributedStyle.YELLOW));
-        // Print the message
-        writer.println(asb.toAnsi());
-
-        // Get subfolders
-        List<String> subfolders;
-        try {
-            subfolders = Files.walk(directory, 1)
-                    .filter(Files::isDirectory)
-                    .map(Path::getFileName)
-                    .map(Path::toString)
-                    .collect(Collectors.toList());
-        } catch (IOException e) {
-            throw new IllegalStateException("Unable to read server-sources", e);
-        }
-
-        // Remove the first element because it's the parent directory itself
-        subfolders = subfolders.subList(1, subfolders.size());
-
-        // If there are no subfolders, write a message and exit
-        if (subfolders.isEmpty()) {
-            writer.println(
-                    new AttributedStringBuilder()
-                            .append("No server sources found\n", AttributedStyle.DEFAULT.foreground(AttributedStyle.RED))
-                            .toAnsi()
-            );
-            System.exit(1);
-        }
-        // If there is only one subfolder, use it
-        if (subfolders.size() == 1) {
-            // Inform the user that the only subfolder will be used and which one it is
-            writer.println(
-                    new AttributedStringBuilder()
-                            .append("Using the only server source found: ", AttributedStyle.DEFAULT.foreground(AttributedStyle.GREEN))
-                            .append(subfolders.get(0) + "\n", AttributedStyle.DEFAULT.foreground(AttributedStyle.YELLOW))
-                            .toAnsi()
-            );
-
-            return directory.resolve(subfolders.get(0));
-        }
-
-
-        // Display the list of subfolders with color
-        terminal.writer().println(
-                new AttributedStringBuilder()
-                        .append("Select a subfolder:\n", AttributedStyle.DEFAULT.foreground(AttributedStyle.GREEN))
-                        .toAnsi()
-        );
-        for (int i = 0; i < subfolders.size(); i++) {
-            terminal.writer().println(
-                    new AttributedStringBuilder()
-                            .append((i + 1) + ". " + subfolders.get(i) + "\n", AttributedStyle.DEFAULT.foreground(AttributedStyle.BLUE))
-                            .toAnsi()
-            );
-        }
-
-        String selectedFolder;
-        while (true) {
-            String input = lineReader.readLine("> ");
-
-            try {
-                int selection = Integer.parseInt(input);
-                if (selection > 0 && selection <= subfolders.size()) {
-                    selectedFolder = subfolders.get(selection - 1);
-                    break;
-                } else {
-                    terminal.writer().println(
-                            new AttributedStringBuilder()
-                                    .append("Invalid selection, try again.\n", AttributedStyle.DEFAULT.foreground(AttributedStyle.RED))
-                                    .toAnsi()
-                    );
-                }
-            } catch (NumberFormatException e) {
-                terminal.writer().println(
-                        new AttributedStringBuilder()
-                                .append("Invalid input, try again.\n", AttributedStyle.DEFAULT.foreground(AttributedStyle.RED))
-                                .toAnsi()
-                );
-            }
-        }
-
-        terminal.writer().println(
-                new AttributedStringBuilder()
-                        .append("You selected: " + selectedFolder + "\n", AttributedStyle.DEFAULT.foreground(AttributedStyle.GREEN))
-                        .toAnsi()
-        );
-
-        return directory.resolve(selectedFolder);
-    }
-
-
     public static Process startMavenProcess(Path serverSource, Path mavenLogFile, Terminal terminal) throws IOException {
         // Create a writer
         PrintWriter writer = terminal.writer();
@@ -381,8 +206,7 @@ public class Main {
         }
 
         // Define the working directory
-        Path workingDirectoryPath = serverSource;
-        File workingDirectory = workingDirectoryPath.toFile();
+        File workingDirectory = serverSource.toFile();
 
         // Start the Maven process
         ProcessBuilder processBuilder = new ProcessBuilder(mavenCommand);

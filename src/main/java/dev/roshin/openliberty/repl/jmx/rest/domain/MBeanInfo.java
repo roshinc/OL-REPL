@@ -1,4 +1,4 @@
-package dev.roshin.openliberty.repl.jmx.rest;
+package dev.roshin.openliberty.repl.jmx.rest.domain;
 
 public class MBeanInfo {
     private String objectName;
@@ -32,5 +32,14 @@ public class MBeanInfo {
 
     public void setURL(String URL) {
         this.URL = URL;
+    }
+
+    @Override
+    public String toString() {
+        return "MBeanInfo{" +
+                "objectName='" + objectName + '\'' +
+                ", className='" + className + '\'' +
+                ", URL='" + URL + '\'' +
+                '}';
     }
 }

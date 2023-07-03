@@ -1,5 +1,7 @@
 package dev.roshin.openliberty.repl;
 
+import dev.roshin.openliberty.repl.jmx.JMXServerManager;
+import dev.roshin.openliberty.repl.jmx.JMXServerManagerImpl;
 import org.jline.reader.LineReader;
 import org.jline.reader.LineReaderBuilder;
 import org.jline.reader.impl.DefaultParser;
@@ -12,17 +14,20 @@ import java.nio.file.Paths;
 
 public class Repl {
 
-    private URL jmxRestConnectorURL;
-    private Terminal terminal;
-    private Logger logger;
+    private final Terminal terminal;
+    private final Logger logger;
 
-    public Repl(URL jmxRestConnectorURL, Terminal terminal) {
-        this.jmxRestConnectorURL = jmxRestConnectorURL;
+    private final JMXServerManager jmxRestConnector;
+
+    public Repl(URL jmxRestConnectorURL, String username, String password, Terminal terminal) throws Exception {
         this.terminal = terminal;
         this.logger = LoggerFactory.getLogger(getClass());
+
+
+        this.jmxRestConnector = new JMXServerManagerImpl(jmxRestConnectorURL, username, password);
     }
 
-    public void start() {
+    public void start() throws Exception {
         logger.info("Starting REPL");
         // Create a line reader
         LineReader lineReader = LineReaderBuilder.builder().terminal(terminal).parser(new DefaultParser())
@@ -37,13 +42,13 @@ public class Repl {
                     //jmxRestConnector.startServer();
                     break;
                 case "stop":
-                    //jmxRestConnector.stopServer();
+                    jmxRestConnector.stopServer();
                     break;
                 case "status":
-                    //jmxRestConnector.status();
+                    terminal.writer().println(jmxRestConnector.getServerInfo().toTerminalString());
                     break;
                 case "exit":
-                    //jmxRestConnector.stopServer();
+                    jmxRestConnector.stopServer();
                     return;
                 default:
                     System.out.println("Invalid command. Please enter start, stop, status, or exit.");
