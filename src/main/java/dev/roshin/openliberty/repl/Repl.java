@@ -1,7 +1,7 @@
 package dev.roshin.openliberty.repl;
 
-import dev.roshin.openliberty.repl.jmx.JMXServerManager;
-import dev.roshin.openliberty.repl.jmx.JMXServerManagerImpl;
+import dev.roshin.openliberty.repl.controllers.jmx.JMXServerManager;
+import dev.roshin.openliberty.repl.controllers.jmx.JMXServerManagerImpl;
 import org.jline.reader.LineReader;
 import org.jline.reader.LineReaderBuilder;
 import org.jline.reader.impl.DefaultParser;
@@ -9,17 +9,20 @@ import org.jline.terminal.Terminal;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.File;
 import java.net.URL;
 import java.nio.file.Paths;
 
 public class Repl {
 
+    private final File serverSourceRunningFile;
     private final Terminal terminal;
     private final Logger logger;
 
     private final JMXServerManager jmxRestConnector;
 
-    public Repl(URL jmxRestConnectorURL, String username, String password, Terminal terminal) throws Exception {
+    public Repl(URL jmxRestConnectorURL, File serverSourceRunningFile, String username, String password, Terminal terminal) throws Exception {
+        this.serverSourceRunningFile = serverSourceRunningFile;
         this.terminal = terminal;
         this.logger = LoggerFactory.getLogger(getClass());
 
@@ -43,12 +46,20 @@ public class Repl {
                     break;
                 case "stop":
                     jmxRestConnector.stopServer();
+                    // Delete the running file
+                    if (serverSourceRunningFile.exists()) {
+                        serverSourceRunningFile.delete();
+                    }
                     break;
                 case "status":
                     terminal.writer().println(jmxRestConnector.getServerInfo().toTerminalString());
                     break;
                 case "exit":
                     jmxRestConnector.stopServer();
+                    // Delete the running file
+                    if (serverSourceRunningFile.exists()) {
+                        serverSourceRunningFile.delete();
+                    }
                     return;
                 default:
                     System.out.println("Invalid command. Please enter start, stop, status, or exit.");

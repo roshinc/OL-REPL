@@ -3,7 +3,7 @@
  */
 package dev.roshin.openliberty.repl;
 
-import dev.roshin.openliberty.repl.jmx.rest.JMXUtil;
+import dev.roshin.openliberty.repl.controllers.jmx.rest.JMXUtil;
 import dev.roshin.openliberty.repl.preparers.ServerXMLPreparer;
 import dev.roshin.openliberty.repl.util.ServerSourceUtils;
 import org.jline.terminal.Terminal;
@@ -31,7 +31,7 @@ public class Main {
     private static Process mavenProcess = null;
     private static volatile boolean serverReady = false;
 
-    private static Logger logger = LoggerFactory.getLogger(Main.class);
+    private static final Logger logger = LoggerFactory.getLogger(Main.class);
 
     public static void main(String[] args) throws IOException {
         logger.debug("Starting Main");
@@ -50,12 +50,10 @@ public class Main {
 
         logger.debug("Server source picked: {}", serverSource);
 
+        //TODO: Check if server source is already running
 
         // Prepare the server source
         prepareServerSource(serverSource, terminal);
-
-        // exit for testing
-//        System.exit(0);
 
         // Create a file name for the log file unique to this run
         String logFileName = "maven_log_" + System.currentTimeMillis() + ".txt";
@@ -64,10 +62,9 @@ public class Main {
         // Create the parent directories for the log file, if they do not exist
         Files.createDirectories(mavenLogFile.getParent());
 
-
         try {
             // Start the Maven process
-            mavenProcess = startMavenProcess(serverSource, mavenLogFile, terminal);
+//            mavenProcess = OpenLibertyMavenWrapper.(serverSource, mavenLogFile, terminal);
 
             // Inform the user we are waiting for 30 seconds, with the word "waiting" in yellow
             AttributedStringBuilder attributedStringBuilder = new AttributedStringBuilder();
@@ -75,6 +72,7 @@ public class Main {
             attributedStringBuilder.append(String.valueOf(30), AttributedStyle.BOLD.foreground(AttributedStyle.YELLOW));
             attributedStringBuilder.append(" seconds for server to become ready", AttributedStyle.BOLD.foreground(AttributedStyle.YELLOW));
             terminal.writer().println(attributedStringBuilder.toAnsi());
+            terminal.writer().flush();
 
 
             // Wait for 30 seconds
@@ -86,6 +84,7 @@ public class Main {
             configuredTimeoutStringBuilder.append(String.valueOf(60), AttributedStyle.BOLD.foreground(AttributedStyle.YELLOW));
             configuredTimeoutStringBuilder.append(" seconds for server to become ready", AttributedStyle.BOLD.foreground(AttributedStyle.YELLOW));
             terminal.writer().println(configuredTimeoutStringBuilder.toAnsi());
+            terminal.writer().flush();
 
             // Start a separate thread to monitor the log file
             Thread logMonitorThread = new Thread(() -> monitorLogFile(mavenLogFile.toFile()));
@@ -102,15 +101,22 @@ public class Main {
                 throw new RuntimeException("Server did not become ready within 60 seconds");
             }
 
+            // At this point, the server is ready
+
+            // Create a temporary file that identifies the server source is running and controlled by this process
+            File serverSourceRunningFile = new File(serverSource.toFile().getAbsolutePath() + ".running");
+
             // Inform the user that the server is ready, with the word "ready" in green
             AttributedStringBuilder serverReadyStringBuilder = new AttributedStringBuilder();
             serverReadyStringBuilder.append("Server ready", AttributedStyle.BOLD.foreground(AttributedStyle.GREEN));
             terminal.writer().println(serverReadyStringBuilder.toAnsi());
+            terminal.writer().flush();
 
             // Write the jmx url to the terminal
             terminal.writer().println("JMX URL: " + JMXUtil.findRestConnectorURL(serverSource, terminal));
+            terminal.writer().flush();
 
-            Repl repl = new Repl(JMXUtil.findRestConnectorURL(serverSource, terminal), "todd", "toddpassword", terminal);
+            Repl repl = new Repl(JMXUtil.findRestConnectorURL(serverSource, terminal), serverSourceRunningFile, "todd", "toddpassword", terminal);
             repl.start();
 
         } catch (Exception e) {
@@ -183,39 +189,6 @@ public class Main {
 
         // Prep server.xml
         ServerXMLPreparer.prepareServerXML(serverSource, terminal);
-    }
-
-
-    public static Process startMavenProcess(Path serverSource, Path mavenLogFile, Terminal terminal) throws IOException {
-        // Create a writer
-        PrintWriter writer = terminal.writer();
-
-        // Create a string builder
-        AttributedStringBuilder asb = new AttributedStringBuilder();
-        // Append that we are going to try to start the server
-        asb.append("Attempting to start the server...\n", AttributedStyle.DEFAULT.foreground(AttributedStyle.GREEN));
-        // Print the message
-        writer.println(asb.toAnsi());
-
-        // Define the Maven command
-        String[] mavenCommand;
-        if (System.getProperty("os.name").toLowerCase().startsWith("windows")) {
-            mavenCommand = new String[]{"cmd.exe", "/c", "mvn liberty:run"};
-        } else { // Linux or Mac
-            mavenCommand = new String[]{"/bin/bash", "-c", "mvn liberty:run"};
-        }
-
-        // Define the working directory
-        File workingDirectory = serverSource.toFile();
-
-        // Start the Maven process
-        ProcessBuilder processBuilder = new ProcessBuilder(mavenCommand);
-        processBuilder.directory(workingDirectory);
-        processBuilder.redirectErrorStream(true);
-        processBuilder.redirectOutput(mavenLogFile.toFile()); // log file
-
-
-        return processBuilder.start();
     }
 
     private static void monitorLogFile(File logFile) {
