@@ -2,6 +2,7 @@ package dev.roshin.openliberty.repl.controllers.maven;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import dev.roshin.openliberty.repl.controllers.maven.domain.MavenAndLogFileResponse;
 import dev.roshin.openliberty.repl.controllers.utils.ProcessUtils;
 import org.jline.terminal.Terminal;
 import org.jline.utils.AttributedStringBuilder;
@@ -38,7 +39,7 @@ public class OpenLibertyMavenWrapper {
         isWindows = os.contains("win");
     }
 
-    private Process doMavenProcess(String goals) throws IOException {
+    private MavenAndLogFileResponse doMavenProcess(String goals) throws IOException {
         logger.debug("Starting maven process for goals: {}", goals);
         Preconditions.checkArgument(!Strings.isNullOrEmpty(goals), "goals cannot be null or empty");
 
@@ -79,11 +80,11 @@ public class OpenLibertyMavenWrapper {
 
         ProcessBuilder processBuilder = ProcessUtils.createProcessBuilder(mavenCommand, goals, isWindows, workingDirectory, logFile);
         logger.debug("Starting process");
-        return processBuilder.start();
+        return new MavenAndLogFileResponse(processBuilder.start(), logFile);
     }
 
 
-    public Process startServerMavenProcess() throws IOException {
+    public MavenAndLogFileResponse startServerMavenProcess() throws IOException {
         logger.debug("Starting the start server maven process");
         // Create a writer
         PrintWriter writer = terminal.writer();
@@ -97,7 +98,7 @@ public class OpenLibertyMavenWrapper {
     }
 
 
-    public Process stopServerMavenProcess() throws IOException {
+    public MavenAndLogFileResponse stopServerMavenProcess() throws IOException {
         logger.debug("Starting the stop server maven process");
         // Create a writer
         PrintWriter writer = terminal.writer();

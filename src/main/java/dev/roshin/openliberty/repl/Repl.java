@@ -1,7 +1,9 @@
 package dev.roshin.openliberty.repl;
 
 import dev.roshin.openliberty.repl.controllers.jmx.JMXServerManager;
-import dev.roshin.openliberty.repl.controllers.jmx.JMXServerManagerImpl;
+import dev.roshin.openliberty.repl.controllers.maven.OpenLibertyMavenWrapper;
+import dev.roshin.openliberty.repl.controllers.shell.OpenLibertyServerScriptWrapper;
+import dev.roshin.openliberty.repl.util.StartStopUtil;
 import org.jline.reader.LineReader;
 import org.jline.reader.LineReaderBuilder;
 import org.jline.reader.impl.DefaultParser;
@@ -10,24 +12,33 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
-import java.net.URL;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 
 public class Repl {
 
     private final File serverSourceRunningFile;
+    private final Path serverSource;
+    private final Path logFile;
+    private final Path libertyPluginFile;
     private final Terminal terminal;
+    private final JMXServerManager jmxServerManager;
+    private final OpenLibertyMavenWrapper openLibertyMavenWrapper;
+    private final OpenLibertyServerScriptWrapper openLibertyServerScriptWrapper;
     private final Logger logger;
 
-    private final JMXServerManager jmxRestConnector;
-
-    public Repl(URL jmxRestConnectorURL, File serverSourceRunningFile, String username, String password, Terminal terminal) throws Exception {
+    public Repl(File serverSourceRunningFile, Path logFile, Path libertyPluginFile, OpenLibertyMavenWrapper openLibertyMavenWrapper, OpenLibertyServerScriptWrapper openLibertyServerScriptWrapper, JMXServerManager jmxServerManager, Terminal terminal) {
         this.serverSourceRunningFile = serverSourceRunningFile;
+        this.serverSource = serverSourceRunningFile.toPath().getParent();
+        this.logFile = logFile;
+        this.libertyPluginFile = libertyPluginFile;
         this.terminal = terminal;
+
+        this.openLibertyMavenWrapper = openLibertyMavenWrapper;
+        this.openLibertyServerScriptWrapper = openLibertyServerScriptWrapper;
+        this.jmxServerManager = jmxServerManager;
+
         this.logger = LoggerFactory.getLogger(getClass());
-
-
-        this.jmxRestConnector = new JMXServerManagerImpl(jmxRestConnectorURL, username, password);
     }
 
     public void start() throws Exception {
@@ -42,20 +53,41 @@ public class Repl {
             line = lineReader.readLine("Enter command (start, stop, status, exit): ");
             switch (line.trim()) {
                 case "start":
-                    //jmxRestConnector.startServer();
-                    break;
+                    // If the server is already running, do not start it again
+                    if (openLibertyServerScriptWrapper.isTheServerRunning()) {
+                        terminal.writer().println("Server is already running");
+                        break;
+                    }
+                    Process mavenProcess = null;
+                    try {
+                        mavenProcess = StartStopUtil.startServerAndRepl(serverSource, openLibertyMavenWrapper, libertyPluginFile,
+                                openLibertyServerScriptWrapper, logFile, terminal);
+                    } finally {
+                        // Flush the terminal writer
+                        terminal.writer().flush();
+                        // If the server was not stopped in a normal way, or if an error occurred,
+                        // the Maven process is killed here
+                        if (mavenProcess != null && mavenProcess.isAlive()) {
+                            mavenProcess.destroyForcibly();
+                        }
+                    }
+                    return;
                 case "stop":
-                    jmxRestConnector.stopServer();
+                    StartStopUtil.stopServer(openLibertyServerScriptWrapper, openLibertyMavenWrapper, terminal);
                     // Delete the running file
                     if (serverSourceRunningFile.exists()) {
                         serverSourceRunningFile.delete();
                     }
                     break;
                 case "status":
-                    terminal.writer().println(jmxRestConnector.getServerInfo().toTerminalString());
+                    if (openLibertyServerScriptWrapper.isTheServerRunning()) {
+                        terminal.writer().println(jmxServerManager.getServerInfo().toTerminalString());
+                    } else {
+                        terminal.writer().println("Server is not running");
+                    }
                     break;
                 case "exit":
-                    jmxRestConnector.stopServer();
+                    StartStopUtil.stopServer(openLibertyServerScriptWrapper, openLibertyMavenWrapper, terminal);
                     // Delete the running file
                     if (serverSourceRunningFile.exists()) {
                         serverSourceRunningFile.delete();

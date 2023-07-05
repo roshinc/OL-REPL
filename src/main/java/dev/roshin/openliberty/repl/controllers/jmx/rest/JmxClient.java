@@ -188,7 +188,7 @@ public class JmxClient {
      */
     public List<MBeanInfo> getMBeans() throws IOException, URISyntaxException, InterruptedException {
         logger.debug("Starting getMBeans");
-        String response = sendRequest(getRequestUrl(true, MBEAN_URL_CONTEXT_ROOT), false);
+        String response = sendRequest(getRequestUrl(true, ""), false);
         logger.debug("Response from getMBeans: {}", response);
         return gson.fromJson(response, new TypeToken<List<MBeanInfo>>() {
         }.getType());
@@ -221,7 +221,7 @@ public class JmxClient {
         String query = queryBuilder.toString();
         logger.debug("Query string: {}", query);
 
-        String response = sendRequest(getRequestUrl(true, MBEAN_URL_CONTEXT_ROOT, "?", query), false);
+        String response = sendRequest(getRequestUrl(true, "?", query), false);
         logger.debug("Response from queryMBeans: {}", response);
         return gson.fromJson(response, new TypeToken<List<MBeanInfo>>() {
         }.getType());
@@ -306,7 +306,7 @@ public class JmxClient {
                 String operationURL = operationObject.get("URL").getAsString();
                 logger.debug("Operation URL: " + operationURL);
                 try {
-                    String response = sendRequest(baseUrl + operationURL, true);
+                    String response = sendRequest(getRequestUrl(false, operationURL), true);
                     logger.debug("Response from " + operation + ": " + response);
                     return true;
                 } catch (Exception e) {

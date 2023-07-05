@@ -2,6 +2,7 @@ package dev.roshin.openliberty.repl.controllers.shell;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import dev.roshin.openliberty.repl.config.exceptions.ConfigurationReaderException;
 import dev.roshin.openliberty.repl.config.generated.LibertyPluginConfigs;
 import dev.roshin.openliberty.repl.controllers.shell.exceptions.OpenLibertyScriptExecutionException;
 import dev.roshin.openliberty.repl.controllers.utils.ProcessUtils;
@@ -25,11 +26,14 @@ import java.util.concurrent.TimeUnit;
  */
 public class OpenLibertyServerScriptWrapper {
 
-    private final File binPath;
-    private final String serverName;
+    private File binPath;
+    private String serverName;
     private final boolean isWindows;
     private final Path logPath;
     private final Duration timeout;
+
+    private final LibertyPluginConfigs libertyPluginConfig;
+
     private final Logger logger;
 
     public OpenLibertyServerScriptWrapper(final LibertyPluginConfigs libertyPluginConfig, final Path logPath, final Duration timeout) throws IOException {
@@ -43,16 +47,37 @@ public class OpenLibertyServerScriptWrapper {
         Files.createDirectories(this.logPath);
         this.timeout = timeout;
         this.logger = LoggerFactory.getLogger(getClass());
+
+        this.libertyPluginConfig = libertyPluginConfig;
+        loadLibertyPluginConfig(libertyPluginConfig);
+
+        String os = System.getProperty("os.name").toLowerCase();
+        logger.debug("Creating {}} for OS: {}", getClass(), os);
+        isWindows = os.contains("win");
+    }
+
+    /**
+     * Loads the configuration from the {@link LibertyPluginConfigs} object.
+     *
+     * @param libertyPluginConfig The configuration object.
+     */
+    private void loadLibertyPluginConfig(final LibertyPluginConfigs libertyPluginConfig) {
         this.serverName = libertyPluginConfig.getServerName();
         logger.debug("Server name: {}", serverName);
 
         // The server script is located in the bin directory of the Open Liberty installation directory
         this.binPath = libertyPluginConfig.getInstallDirectory().resolve("bin").toFile();
         logger.debug("Server script bin path: {}", binPath);
+    }
 
-        String os = System.getProperty("os.name").toLowerCase();
-        logger.debug("Creating {}} for OS: {}", getClass(), os);
-        isWindows = os.contains("win");
+    /**
+     * Reloads the configuration from the {@link LibertyPluginConfigs} object, after invoking reload on the object.
+     *
+     * @throws ConfigurationReaderException If the configuration cannot be reloaded.
+     */
+    public void reloadLibertyPluginConfig() throws ConfigurationReaderException {
+        this.libertyPluginConfig.reload();
+        loadLibertyPluginConfig(this.libertyPluginConfig);
     }
 
     private String runCommand(final String command) throws IOException, OpenLibertyScriptExecutionException {

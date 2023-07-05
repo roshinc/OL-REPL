@@ -3,9 +3,15 @@
  */
 package dev.roshin.openliberty.repl;
 
-import dev.roshin.openliberty.repl.controllers.jmx.rest.JMXUtil;
+import dev.roshin.openliberty.repl.config.exceptions.ConfigurationReaderException;
+import dev.roshin.openliberty.repl.config.generated.LibertyPluginConfigs;
+import dev.roshin.openliberty.repl.controllers.maven.OpenLibertyMavenWrapper;
+import dev.roshin.openliberty.repl.controllers.shell.OpenLibertyServerScriptWrapper;
+import dev.roshin.openliberty.repl.controllers.shell.exceptions.OpenLibertyScriptExecutionException;
+import dev.roshin.openliberty.repl.controllers.utils.ProcessUtils;
 import dev.roshin.openliberty.repl.preparers.ServerXMLPreparer;
 import dev.roshin.openliberty.repl.util.ServerSourceUtils;
+import dev.roshin.openliberty.repl.util.StartStopUtil;
 import org.jline.terminal.Terminal;
 import org.jline.terminal.TerminalBuilder;
 import org.jline.utils.AttributedStringBuilder;
@@ -20,6 +26,7 @@ import java.io.RandomAccessFile;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.Duration;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -50,83 +57,59 @@ public class Main {
 
         logger.debug("Server source picked: {}", serverSource);
 
-        //TODO: Check if server source is already running
+        // Create a file name for the log file unique to this run
+        String logFileName = "ol_repl_log_" + System.currentTimeMillis() + ".log";
+        // Store the log file in a temporary directory within the current working directory
+        Path logFile = Paths.get(System.getProperty("user.dir")).resolve("temp").resolve(logFileName);
+        // Create the parent directories for the log file, if they do not exist
+        Files.createDirectories(logFile.getParent());
+        // Enforce the log file limit
+        ProcessUtils.enforceLogFileLimit("ol_repl_log_", logFile.getParent(), 10);
+
+        // Create a maven wrapper
+        OpenLibertyMavenWrapper openLibertyMavenWrapper = new OpenLibertyMavenWrapper(serverSource, logFile.getParent(), terminal);
+        // Create a shell script wrapper
+        OpenLibertyServerScriptWrapper openLibertyServerScriptWrapper = null;
+
+        // Create path to the liberty plugin file in the target directory, which may not exist yet
+        Path libertyPluginFile = serverSource.resolve("target").resolve("liberty-plugin-config.xml");
+        //Check if the liberty plugin file exists
+        if (Files.exists(libertyPluginFile)) {
+            // Load the liberty plugin file
+            try {
+                LibertyPluginConfigs libertyPluginConfigs = new LibertyPluginConfigs(libertyPluginFile);
+                // Check if the server is running, using the shell script
+                openLibertyServerScriptWrapper =
+                        new OpenLibertyServerScriptWrapper(libertyPluginConfigs, logFile.getParent(), Duration.ofSeconds(100));
+                if (openLibertyServerScriptWrapper.isTheServerRunning()) {
+                    // Inform the user that an old instance of the server is running, with the word "old" in yellow
+                    AttributedStringBuilder oldServerRunningStringBuilder = new AttributedStringBuilder();
+                    oldServerRunningStringBuilder.append("Old server instance is running",
+                            AttributedStyle.BOLD.foreground(AttributedStyle.YELLOW));
+                    terminal.writer().println(oldServerRunningStringBuilder.toAnsi());
+                    terminal.writer().flush();
+                    logger.debug("Old server instance is running");
+                    StartStopUtil.stopServer(openLibertyServerScriptWrapper, openLibertyMavenWrapper, terminal);
+
+                }
+            } catch (ConfigurationReaderException | OpenLibertyScriptExecutionException e) {
+                // Inform the user that the server might be in unknown state, with the word "unknown" in yellow
+                AttributedStringBuilder unknownStateStringBuilder = new AttributedStringBuilder();
+                unknownStateStringBuilder.append("Server might be in an unknown state, please check manually",
+                        AttributedStyle.BOLD.foreground(AttributedStyle.YELLOW));
+                terminal.writer().println(unknownStateStringBuilder.toAnsi());
+                terminal.writer().flush();
+                logger.error("Error while reading the liberty plugin config file or executing the shell script", e);
+                throw new RuntimeException(e);
+            }
+        }
 
         // Prepare the server source
         prepareServerSource(serverSource, terminal);
 
-        // Create a file name for the log file unique to this run
-        String logFileName = "maven_log_" + System.currentTimeMillis() + ".txt";
-        // Store the log file in a temporary directory within the current working directory
-        Path mavenLogFile = Paths.get(System.getProperty("user.dir")).resolve("temp").resolve(logFileName);
-        // Create the parent directories for the log file, if they do not exist
-        Files.createDirectories(mavenLogFile.getParent());
-
         try {
-            // Start the Maven process
-//            mavenProcess = OpenLibertyMavenWrapper.(serverSource, mavenLogFile, terminal);
-
-            // Inform the user we are waiting for 30 seconds, with the word "waiting" in yellow
-            AttributedStringBuilder attributedStringBuilder = new AttributedStringBuilder();
-            attributedStringBuilder.append("Waiting standard ");
-            attributedStringBuilder.append(String.valueOf(30), AttributedStyle.BOLD.foreground(AttributedStyle.YELLOW));
-            attributedStringBuilder.append(" seconds for server to become ready", AttributedStyle.BOLD.foreground(AttributedStyle.YELLOW));
-            terminal.writer().println(attributedStringBuilder.toAnsi());
-            terminal.writer().flush();
-
-
-            // Wait for 30 seconds
-            TimeUnit.SECONDS.sleep(30);
-
-            // Inform the user we are waiting for 30 seconds, with the word "waiting" in yellow
-            AttributedStringBuilder configuredTimeoutStringBuilder = new AttributedStringBuilder();
-            configuredTimeoutStringBuilder.append("Polling for configured timeout of ");
-            configuredTimeoutStringBuilder.append(String.valueOf(60), AttributedStyle.BOLD.foreground(AttributedStyle.YELLOW));
-            configuredTimeoutStringBuilder.append(" seconds for server to become ready", AttributedStyle.BOLD.foreground(AttributedStyle.YELLOW));
-            terminal.writer().println(configuredTimeoutStringBuilder.toAnsi());
-            terminal.writer().flush();
-
-            // Start a separate thread to monitor the log file
-            Thread logMonitorThread = new Thread(() -> monitorLogFile(mavenLogFile.toFile()));
-            logMonitorThread.start();
-
-            // Wait for server to become ready or timeout after 60 seconds
-            for (int i = 0; i < 60; i++) {
-                if (serverReady) {
-                    break;
-                }
-                TimeUnit.SECONDS.sleep(1);
-            }
-            if (!serverReady) {
-                throw new RuntimeException("Server did not become ready within 60 seconds");
-            }
-
-            // At this point, the server is ready
-
-            // Create a temporary file that identifies the server source is running and controlled by this process
-            File serverSourceRunningFile = new File(serverSource.toFile().getAbsolutePath() + ".running");
-
-            // Inform the user that the server is ready, with the word "ready" in green
-            AttributedStringBuilder serverReadyStringBuilder = new AttributedStringBuilder();
-            serverReadyStringBuilder.append("Server ready", AttributedStyle.BOLD.foreground(AttributedStyle.GREEN));
-            terminal.writer().println(serverReadyStringBuilder.toAnsi());
-            terminal.writer().flush();
-
-            // Write the jmx url to the terminal
-            terminal.writer().println("JMX URL: " + JMXUtil.findRestConnectorURL(serverSource, terminal));
-            terminal.writer().flush();
-
-            Repl repl = new Repl(JMXUtil.findRestConnectorURL(serverSource, terminal), serverSourceRunningFile, "todd", "toddpassword", terminal);
-            repl.start();
-
-        } catch (Exception e) {
-            e.printStackTrace();
-            logger.error("Error starting ol repl", e);
-            //Inform the user that an error occurred, with the word "error" in red
-            AttributedStringBuilder errorStringBuilder = new AttributedStringBuilder();
-            errorStringBuilder.append("Error: ", AttributedStyle.BOLD.foreground(AttributedStyle.RED));
-            errorStringBuilder.append(e.getMessage(), AttributedStyle.BOLD.foreground(AttributedStyle.RED));
-            terminal.writer().println(errorStringBuilder.toAnsi());
+            mavenProcess = StartStopUtil.startServerAndRepl(serverSource, openLibertyMavenWrapper, libertyPluginFile,
+                    openLibertyServerScriptWrapper, logFile, terminal);
         } finally {
             // Flush the terminal writer
             terminal.writer().flush();
