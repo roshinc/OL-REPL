@@ -1,4 +1,4 @@
-package dev.roshin.openliberty.repl.jmx.rest.domain;
+package dev.roshin.openliberty.repl.controllers.jmx.rest.domain;
 
 import java.util.List;
 

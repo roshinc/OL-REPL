@@ -1,4 +1,4 @@
-package dev.roshin.openliberty.repl.jmx.rest.domain.attributes;
+package dev.roshin.openliberty.repl.controllers.jmx.rest.domain.attributes;
 
 public class AttributeValue {
     //    @SerializedName("value")

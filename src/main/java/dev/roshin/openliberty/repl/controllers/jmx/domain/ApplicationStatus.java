@@ -1,4 +1,4 @@
-package dev.roshin.openliberty.repl.jmx.domain;
+package dev.roshin.openliberty.repl.controllers.jmx.domain;
 
 import dev.roshin.openliberty.repl.TerminalPrintablePojo;
 import org.jline.utils.AttributedStringBuilder;
