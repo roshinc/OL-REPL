@@ -1,8 +1,6 @@
 package dev.roshin.openliberty.repl.util;
 
 import com.google.common.base.Preconditions;
-import org.jline.reader.LineReader;
-import org.jline.reader.LineReaderBuilder;
 import org.jline.terminal.Terminal;
 import org.jline.utils.AttributedStringBuilder;
 import org.jline.utils.AttributedStyle;
@@ -93,13 +91,13 @@ public class ServerSourceUtils {
     /**
      * Validates the server source
      * <p>
-     *     The server source must contain the following:
-     *     <ul>
-     *         <li>A valid pom.xml file</li>
-     *         <li>A valid src/main/liberty/config/server.xml file</li>
-     *         <li>A maven wrapper for the current OS</li>
-     *     </ul>
-     *     If any of the above are not present, the server source is not valid
+     * The server source must contain the following:
+     * <ul>
+     *     <li>A valid pom.xml file</li>
+     *     <li>A valid src/main/liberty/config/server.xml file</li>
+     *     <li>A maven wrapper for the current OS</li>
+     * </ul>
+     * If any of the above are not present, the server source is not valid
      *
      * @param serverSource The path of the server source
      * @param terminal     The terminal to use
@@ -125,7 +123,7 @@ public class ServerSourceUtils {
 
         // Validate the pom.xml file
         logger.debug("Validating the pom.xml file");
-        if(!validateServerSourcePom(serverSource)){
+        if (!validateServerSourcePom(serverSource)) {
             logger.debug("The server source at {}, does not contain a valid pom.xml file", serverSource);
             TerminalUtils.printErrorMessages("The selected server source is not valid", terminal);
             throw new IllegalStateException("The selected server source does not contain a valid pom.xml file");
@@ -171,6 +169,7 @@ public class ServerSourceUtils {
                     // It's a git repository, print the latest commit hash and message
                     ProcessBuilder gitLogProcessBuilder = new ProcessBuilder();
                     gitLogProcessBuilder.command("git", "log", "-1", "--pretty=format:%h - %s");
+                    gitLogProcessBuilder.directory(serverSource.toFile());
                     Process gitLogParseProcess = gitLogProcessBuilder.start();
                     reader = new BufferedReader(new InputStreamReader(gitLogParseProcess.getInputStream()));
                     while ((line = reader.readLine()) != null) {
@@ -199,7 +198,7 @@ public class ServerSourceUtils {
     /**
      * Validates the pom.xml file of the server source
      * <p>
-     *     The pom.xml file must contain the liberty-maven-plugin
+     * The pom.xml file must contain the liberty-maven-plugin
      *
      * @param serverSource The server source
      * @return True if the pom.xml file is valid, false otherwise
