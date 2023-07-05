@@ -20,3 +20,5 @@ buildNumber.properties
 .idea
 # App specific
 server-sources/
+test-logs/
+logs/
