@@ -57,7 +57,13 @@ public class ServerXMLPreparer {
 
         //== Administrator role configuration ==
         // Get the administrator-role element
-        var administratorRoleElement = serverXmlDocument.getRootElement().getChild("administrator-role");
+        Element administratorRoleElement = serverXmlDocument.getRootElement().getChild("administrator-role");
+        // If the element is not present, create it
+        if (administratorRoleElement == null) {
+            administratorRoleElement = new Element("administrator-role");
+            serverXmlDocument.getRootElement().addContent(administratorRoleElement);
+        }
+        // Add our group to the administrator-role element
         addGroupToAdministratorRoleIfNotPresent(administratorRoleElement, "managers");
 
 
@@ -169,6 +175,13 @@ public class ServerXMLPreparer {
     }
 
 
+    /**
+     * Checks if the given port is available, if it is not it will try the next port
+     * until it finds an available port or until it has tried 10 times
+     *
+     * @param httpPortString The port to check
+     * @return The first available port
+     */
     private static String getAvailablePort(final String httpPortString) {
 
         // Check if the port is already in use
