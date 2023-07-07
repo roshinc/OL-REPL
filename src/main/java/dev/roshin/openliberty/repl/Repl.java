@@ -82,6 +82,7 @@ public class Repl {
                 case "status":
                     if (openLibertyServerScriptWrapper.isTheServerRunning()) {
                         terminal.writer().println(jmxServerManager.getServerInfo().toTerminalString());
+                        terminal.writer().println(openLibertyServerScriptWrapper.version());
                     } else {
                         terminal.writer().println("Server is not running");
                     }

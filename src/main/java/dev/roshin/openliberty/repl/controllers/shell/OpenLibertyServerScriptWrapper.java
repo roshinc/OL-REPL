@@ -386,4 +386,7 @@ public class OpenLibertyServerScriptWrapper {
         return version(serverName);
     }
 
+    public LibertyPluginConfigs getLibertyPluginConfig() {
+        return libertyPluginConfig;
+    }
 }

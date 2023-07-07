@@ -174,17 +174,19 @@ public class StartStopUtil {
             printWriter.println(serverReadyStringBuilder.toAnsi());
             printWriter.flush();
 
+            LibertyPluginConfigs libertyPluginConfigs;
             // Check if the shell script wrapper is null
             if (possibleOpenLibertyServerScriptWrapper == null) {
                 // Load the liberty plugin file
-                LibertyPluginConfigs libertyPluginConfigs = new LibertyPluginConfigs(libertyPluginFile);
+                libertyPluginConfigs = new LibertyPluginConfigs(libertyPluginFile);
                 // Create a new shell script wrapper
                 possibleOpenLibertyServerScriptWrapper = new OpenLibertyServerScriptWrapper(libertyPluginConfigs, logFile.getParent(), Duration.ofSeconds(100));
             } else {
                 possibleOpenLibertyServerScriptWrapper.reloadLibertyPluginConfig();
+                libertyPluginConfigs = possibleOpenLibertyServerScriptWrapper.getLibertyPluginConfig();
             }
             // Create JMX manager
-            JMXServerManager jmxServerManager = new JMXServerManagerImpl(JMXUtil.findRestConnectorURL(serverSource, terminal), "todd", "toddpassword");
+            JMXServerManager jmxServerManager = new JMXServerManagerImpl(JMXUtil.findRestConnectorURL(libertyPluginConfigs, terminal), "todd", "toddpassword");
 
             logger.debug("Server is running");
             logger.debug("Shell script wrapper says server is running: " + possibleOpenLibertyServerScriptWrapper.isTheServerRunning());

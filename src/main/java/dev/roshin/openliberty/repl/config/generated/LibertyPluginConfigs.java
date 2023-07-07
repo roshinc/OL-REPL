@@ -51,6 +51,10 @@ public class LibertyPluginConfigs {
         load();
     }
 
+    public LibertyPluginConfigs(String basePath) throws ConfigurationReaderException {
+        this(Paths.get(basePath, "target", "liberty-plugin-config.xml"));
+    }
+
     /**
      * Loads the configuration file.
      */
