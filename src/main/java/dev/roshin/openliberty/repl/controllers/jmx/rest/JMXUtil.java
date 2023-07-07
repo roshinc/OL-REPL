@@ -1,9 +1,7 @@
 package dev.roshin.openliberty.repl.controllers.jmx.rest;
 
+import dev.roshin.openliberty.repl.config.generated.LibertyPluginConfigs;
 import dev.roshin.openliberty.repl.util.TerminalUtils;
-import org.jdom2.Document;
-import org.jdom2.JDOMException;
-import org.jdom2.input.SAXBuilder;
 import org.jline.terminal.Terminal;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -18,28 +16,13 @@ public class JMXUtil {
 
     private static final Logger logger = LoggerFactory.getLogger(JMXUtil.class);
 
-    public static URL findRestConnectorURL(Path serverSource, Terminal terminal) throws MalformedURLException {
+    public static URL findRestConnectorURL(LibertyPluginConfigs libertyPluginConfigs, Terminal terminal) throws MalformedURLException {
         logger.debug("Starting findRestConnectorURL");
 
-        // Create path to target directory
-        Path target = serverSource.resolve("target");
-        // Create path to liberty-plugin-config.xml file
-        Path libertyPluginConfig = target.resolve("liberty-plugin-config.xml");
-        // Load the liberty-plugin-config.xml file
-        // Create jdom2 document for the liberty-plugin-config.xml file
-        Document libertyPluginConfigDocument;
-        try {
-            libertyPluginConfigDocument = new SAXBuilder().build(libertyPluginConfig.toFile());
-        } catch (JDOMException | IOException e) {
-            // Inform the user that the liberty-plugin-config.xml file could not be loaded
-            TerminalUtils.printErrorMessages("Error while loading the liberty-plugin-config.xml file", terminal);
-            logger.debug("Error while loading the liberty-plugin-config.xml file", e);
-            throw new RuntimeException("Error while loading the liberty-plugin-config.xml file", e);
-        }
         // Get the server output directory from the liberty-plugin-config.xml file
-        String serverOutputDirectory = libertyPluginConfigDocument.getRootElement().getChild("serverOutputDirectory").getText();
+        Path serverOutputDirectory = libertyPluginConfigs.getServerOutputDirectory();
         // Create path to ${server.output.dir}/logs/state/com.ibm.ws.jmx.rest.address file
-        Path jmxRestAddress = target.resolve(serverOutputDirectory).resolve("logs/state/com.ibm.ws.jmx.rest.address");
+        Path jmxRestAddress = (serverOutputDirectory).resolve("logs/state/com.ibm.ws.jmx.rest.address");
         // Load the com.ibm.ws.jmx.rest.address file
         String restConnectorURL;
         try {
